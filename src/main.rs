@@ -16,12 +16,23 @@ const BOARD_SIZE: usize = 4;
 /// 今後、盤面が満杯かどうかの判定や、探索の深さの上限を考えるときに使う。
 const CELL_COUNT: usize = BOARD_SIZE * BOARD_SIZE * BOARD_SIZE;
 
+/// 上からコマを落とせる柱の本数。
+///
+/// 実物の立体4目並べでは `4 x 4` 本の柱があり、プレイヤーはその柱を1本選ぶ。
+/// コマの高さ `z` は自分で選ぶのではなく、重力によって自動的に決まる。
+const COLUMN_COUNT: usize = BOARD_SIZE * BOARD_SIZE;
+
 /// 立体4目並べの盤面。
 ///
-/// 添字はまだ厳密な意味を固定していないが、現時点では
-/// `board[z][y][x]` のように「高さ・行・列」と読む想定にしておく。
-/// まずは人間が理解しやすい3次元配列で表し、後で必要に応じて
-/// 数値化やビットボード表現を追加する。
+/// 添字は `board[z][y][x]` と読む。
+///
+/// - `x`: 横方向の位置
+/// - `y`: 奥行き方向の位置
+/// - `z`: 高さ。`0` が一番下、`3` が一番上
+///
+/// 実物では上から穴の開いたコマを柱に通して落とすため、同じ `(x, y)` の柱では
+/// `z = 0` から順番に埋まる。`z = 0` が空なのに `z = 1` だけ埋まる状態は、
+/// 通常のプレイでは発生しない不正な状態として扱う。
 type Board = [[[Cell; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
 
 /// 盤面の1マスの状態。
@@ -81,6 +92,50 @@ impl Player {
     }
 }
 
+/// プレイヤーが選ぶ「柱」。
+///
+/// 重力ありの立体4目並べでは、プレイヤーは `(x, y, z)` の3次元座標を直接選ばない。
+/// 選ぶのは上からコマを落とす柱、つまり `(x, y)` だけ。
+/// 実際に入る高さ `z` は、その柱の下から何段目まで埋まっているかで決まる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Column {
+    /// 横方向の位置。`0..4` の範囲を使う。
+    x: usize,
+
+    /// 奥行き方向の位置。`0..4` の範囲を使う。
+    y: usize,
+}
+
+impl Column {
+    /// 新しい柱座標を作る。
+    ///
+    /// ここでは範囲チェックをしない。
+    /// 範囲外の座標をどう扱うかは、実際に着手するときの `GameState::play` で
+    /// `Result` として返す。
+    pub const fn new(x: usize, y: usize) -> Self {
+        Self { x, y }
+    }
+
+    /// この柱が `4 x 4` の盤面内にあるかを返す。
+    pub const fn is_in_bounds(self) -> bool {
+        self.x < BOARD_SIZE && self.y < BOARD_SIZE
+    }
+}
+
+/// 着手できなかった理由。
+///
+/// Rust では、失敗する可能性がある処理を `Result` で表すことが多い。
+/// 今回は「盤面外の柱を指定した」場合と「柱がすでに満杯だった」場合を、
+/// プログラムが区別できるようにしている。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlayError {
+    /// `x` または `y` が `0..4` の範囲外だった。
+    OutOfBounds,
+
+    /// 指定した柱の `z = 0..3` がすべて埋まっていた。
+    ColumnFull,
+}
+
 /// 立体4目並べの「状態」。
 ///
 /// ゲーム解析でいう状態とは、「ここから先のゲーム進行を一意に決めるために
@@ -131,6 +186,69 @@ impl GameState {
     pub const fn is_full(&self) -> bool {
         self.moves_played as usize == CELL_COUNT
     }
+
+    /// 指定した柱に次のコマが入る高さ `z` を返す。
+    ///
+    /// 例えば、ある柱 `(x, y)` がまだ空なら `Some(0)` を返す。
+    /// 一番下だけ埋まっていれば次は `Some(1)` になる。
+    /// `z = 0, 1, 2, 3` がすべて埋まっている柱なら、もう置けないので `None` を返す。
+    fn next_empty_z(&self, column: Column) -> Option<usize> {
+        if !column.is_in_bounds() {
+            return None;
+        }
+
+        (0..BOARD_SIZE).find(|&z| self.board[z][column.y][column.x] == Cell::Empty)
+    }
+
+    /// 指定した柱が満杯かどうかを返す。
+    ///
+    /// 重力ありルールでは、柱の一番上 `z = 3` まで埋まると、
+    /// その `(x, y)` は合法手ではなくなる。
+    fn is_column_full(&self, column: Column) -> bool {
+        self.next_empty_z(column).is_none()
+    }
+
+    /// 現在の状態から選べる合法手を列挙する。
+    ///
+    /// 重力なしなら空きマスの数だけ合法手があるが、重力ありでは
+    /// 「まだ満杯ではない柱」の数だけ合法手がある。
+    /// 初期状態では `4 x 4 = 16` 通りになる。
+    fn legal_moves(&self) -> Vec<Column> {
+        let mut moves = Vec::new();
+
+        for y in 0..BOARD_SIZE {
+            for x in 0..BOARD_SIZE {
+                let column = Column::new(x, y);
+                if !self.is_column_full(column) {
+                    moves.push(column);
+                }
+            }
+        }
+
+        moves
+    }
+
+    /// 指定した柱に現在の手番のコマを落とし、次の状態を返す。
+    ///
+    /// この関数は元の `GameState` を直接書き換えない。
+    /// 代わりに、コピーした状態にコマを置いて返す。
+    /// 学習段階では「この状態からこの手を打つと、別の状態ができる」と読む方が、
+    /// ゲーム木の考え方と対応しやすい。
+    fn play(&self, column: Column) -> Result<Self, PlayError> {
+        if !column.is_in_bounds() {
+            return Err(PlayError::OutOfBounds);
+        }
+
+        let Some(z) = self.next_empty_z(column) else {
+            return Err(PlayError::ColumnFull);
+        };
+
+        let mut next_state = *self;
+        next_state.board[z][column.y][column.x] = self.turn.cell();
+        next_state.turn = self.turn.next();
+        next_state.moves_played += 1;
+        Ok(next_state)
+    }
 }
 
 /// ゲーム開始時の状態を表す定数。
@@ -165,6 +283,7 @@ mod tests {
         assert_eq!(state.turn.next(), Player::White);
         assert_eq!(state.moves_played, 0);
         assert!(!state.is_full());
+        assert_eq!(state.legal_moves().len(), COLUMN_COUNT);
         assert!(
             state
                 .board
@@ -172,6 +291,66 @@ mod tests {
                 .flatten()
                 .flatten()
                 .all(|cell| *cell == Cell::Empty)
+        );
+    }
+
+    /// 初期状態では、どの柱も一番下の `z = 0` にコマが入る。
+    #[test]
+    fn initial_state_drops_piece_to_bottom() {
+        let state = GameState::initial();
+        let column = Column::new(2, 1);
+
+        assert_eq!(state.next_empty_z(column), Some(0));
+
+        let next_state = state.play(column).unwrap();
+
+        assert_eq!(next_state.board[0][1][2], Cell::Black);
+        assert_eq!(next_state.turn, Player::White);
+        assert_eq!(next_state.moves_played, 1);
+    }
+
+    /// 同じ柱に続けて置くと、コマは `z = 0` から順番に積み上がる。
+    ///
+    /// `z = 0` が空なのに `z = 1` に置かれる、という状態にはならない。
+    #[test]
+    fn pieces_stack_in_the_same_column() {
+        let column = Column::new(0, 0);
+        let state = GameState::initial()
+            .play(column)
+            .unwrap()
+            .play(column)
+            .unwrap();
+
+        assert_eq!(state.board[0][0][0], Cell::Black);
+        assert_eq!(state.board[1][0][0], Cell::White);
+        assert_eq!(state.board[2][0][0], Cell::Empty);
+        assert_eq!(state.next_empty_z(column), Some(2));
+    }
+
+    /// 4段すべて埋まった柱は、それ以上合法手として選べない。
+    #[test]
+    fn full_column_is_not_a_legal_move() {
+        let full_column = Column::new(3, 3);
+        let mut state = GameState::initial();
+
+        for _ in 0..BOARD_SIZE {
+            state = state.play(full_column).unwrap();
+        }
+
+        assert_eq!(state.next_empty_z(full_column), None);
+        assert_eq!(state.play(full_column), Err(PlayError::ColumnFull));
+        assert_eq!(state.legal_moves().len(), COLUMN_COUNT - 1);
+        assert!(!state.legal_moves().contains(&full_column));
+    }
+
+    /// 盤面外の柱は、合法手ではなくエラーになる。
+    #[test]
+    fn out_of_bounds_column_is_rejected() {
+        let state = GameState::initial();
+
+        assert_eq!(
+            state.play(Column::new(BOARD_SIZE, 0)),
+            Err(PlayError::OutOfBounds)
         );
     }
 }
