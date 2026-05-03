@@ -1,4 +1,4 @@
-use super::{BOARD_SIZE, CELL_COUNT, Cell, Column, Player, Position};
+use super::{BOARD_SIZE, CELL_COUNT, Cell, Column, Direction, Player, Position};
 
 /// 立体4目並べの盤面。
 ///
@@ -133,6 +133,38 @@ impl GameState {
         moves
     }
 
+    /// 指定した3次元座標にあるマスの状態を返す。
+    ///
+    /// `Position` は盤面上の実際の場所を表すので、
+    /// `board[z][y][x]` の順番で配列にアクセスする。
+    /// 今後の勝敗判定では、最後に置かれた場所や、その周囲のマスを見るために使う。
+    pub fn cell_at(&self, position: Position) -> Cell {
+        self.board[position.z][position.y][position.x]
+    }
+
+    /// 指定した位置の隣から、指定方向へ同じマス状態が何個続くかを数える。
+    ///
+    /// `start` 自身は数えない。`direction` に1歩進んだ場所から数え始める。
+    /// 盤面外に出た場合、または違うマス状態に当たった場合にそこで止まる。
+    ///
+    /// 勝敗判定では、最後に置かれたコマを中心として、
+    /// ある方向とその逆方向の両方を数え、最後に置かれたコマ自身の1個を足す。
+    pub fn count_same_cells(&self, start: Position, direction: Direction, target: Cell) -> usize {
+        let mut count = 0;
+        let mut current = start;
+
+        while let Some(next) = direction.step_from(current) {
+            if self.cell_at(next) != target {
+                break;
+            }
+
+            count += 1;
+            current = next;
+        }
+
+        count
+    }
+
     /// 指定した柱に現在の手番のコマを落とし、着手結果を返す。
     ///
     /// この関数は元の `GameState` を直接書き換えない。
@@ -167,7 +199,7 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::COLUMN_COUNT;
+    use crate::game::{COLUMN_COUNT, Direction};
 
     /// 初期状態が「空の盤面・黒番・0手目」になっていることを確認する。
     ///
@@ -252,6 +284,60 @@ mod tests {
         assert_eq!(
             state.play(Column::new(BOARD_SIZE, 0)),
             Err(PlayError::OutOfBounds)
+        );
+    }
+
+    /// `cell_at` は、`Position` で指定した `board[z][y][x]` の中身を返す。
+    #[test]
+    fn cell_at_returns_cell_at_position() {
+        let result = GameState::initial().play(Column::new(2, 1)).unwrap();
+
+        assert_eq!(result.state.cell_at(Position::new(2, 1, 0)), Cell::Black);
+        assert_eq!(result.state.cell_at(Position::new(2, 1, 1)), Cell::Empty);
+    }
+
+    /// 指定方向に同じ色が続いている間だけ数える。
+    #[test]
+    fn count_same_cells_counts_matching_cells_in_direction() {
+        let mut state = GameState::initial();
+        state = state.play(Column::new(0, 0)).unwrap().state;
+        state = state.play(Column::new(0, 1)).unwrap().state;
+        state = state.play(Column::new(1, 0)).unwrap().state;
+        state = state.play(Column::new(1, 1)).unwrap().state;
+        state = state.play(Column::new(2, 0)).unwrap().state;
+
+        assert_eq!(
+            state.count_same_cells(Position::new(0, 0, 0), Direction::new(1, 0, 0), Cell::Black),
+            2
+        );
+    }
+
+    /// 違う色のコマに当たったら、そこで数えるのを止める。
+    #[test]
+    fn count_same_cells_stops_at_different_cell() {
+        let mut state = GameState::initial();
+        state = state.play(Column::new(0, 0)).unwrap().state;
+        state = state.play(Column::new(1, 0)).unwrap().state;
+        state = state.play(Column::new(2, 0)).unwrap().state;
+
+        assert_eq!(
+            state.count_same_cells(Position::new(0, 0, 0), Direction::new(1, 0, 0), Cell::Black),
+            0
+        );
+    }
+
+    /// 盤面外に出たら、そこで数えるのを止める。
+    #[test]
+    fn count_same_cells_stops_at_board_edge() {
+        let state = GameState::initial().play(Column::new(0, 0)).unwrap().state;
+
+        assert_eq!(
+            state.count_same_cells(
+                Position::new(0, 0, 0),
+                Direction::new(-1, 0, 0),
+                Cell::Black
+            ),
+            0
         );
     }
 }
