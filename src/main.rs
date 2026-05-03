@@ -122,6 +122,48 @@ impl Column {
     }
 }
 
+/// 実際にコマが置かれた3次元座標。
+///
+/// `Column` が「プレイヤーが選ぶ柱」なのに対して、
+/// `Position` は「重力によって最終的にコマが入った場所」を表す。
+///
+/// 例えば、プレイヤーが `Column { x: 2, y: 1 }` を選んだとき、
+/// その柱が空なら、実際の置き場所は `Position { x: 2, y: 1, z: 0 }` になる。
+/// 勝敗判定では、この「最後に置かれた場所」から伸びる直線だけを調べればよいので、
+/// 毎回すべての勝利ラインを調べるより考えやすくなる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Position {
+    /// 横方向の位置。`0..4` の範囲を使う。
+    x: usize,
+
+    /// 奥行き方向の位置。`0..4` の範囲を使う。
+    y: usize,
+
+    /// 高さ方向の位置。`0` が一番下、`3` が一番上。
+    z: usize,
+}
+
+impl Position {
+    /// 新しい3次元座標を作る。
+    pub const fn new(x: usize, y: usize, z: usize) -> Self {
+        Self { x, y, z }
+    }
+}
+
+/// 1手を打った結果。
+///
+/// `state` は着手後の新しい状態、`placed_at` はその手で実際にコマが入った位置。
+/// この2つをまとめて返すことで、「次の状態に進む」ことと
+/// 「最後の着手位置を使って勝敗判定する」ことの両方ができる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlayResult {
+    /// 着手後のゲーム状態。
+    state: GameState,
+
+    /// 今回の手で実際にコマが置かれた3次元座標。
+    placed_at: Position,
+}
+
 /// 着手できなかった理由。
 ///
 /// Rust では、失敗する可能性がある処理を `Result` で表すことが多い。
@@ -228,13 +270,17 @@ impl GameState {
         moves
     }
 
-    /// 指定した柱に現在の手番のコマを落とし、次の状態を返す。
+    /// 指定した柱に現在の手番のコマを落とし、着手結果を返す。
     ///
     /// この関数は元の `GameState` を直接書き換えない。
     /// 代わりに、コピーした状態にコマを置いて返す。
     /// 学習段階では「この状態からこの手を打つと、別の状態ができる」と読む方が、
     /// ゲーム木の考え方と対応しやすい。
-    fn play(&self, column: Column) -> Result<Self, PlayError> {
+    ///
+    /// 戻り値には、次の状態だけでなく `placed_at` も含める。
+    /// `placed_at` は「最後に置かれた xyz」なので、次の段階で勝敗判定を実装するときに
+    /// その場所を通るラインだけを調べる入口になる。
+    fn play(&self, column: Column) -> Result<PlayResult, PlayError> {
         if !column.is_in_bounds() {
             return Err(PlayError::OutOfBounds);
         }
@@ -247,7 +293,11 @@ impl GameState {
         next_state.board[z][column.y][column.x] = self.turn.cell();
         next_state.turn = self.turn.next();
         next_state.moves_played += 1;
-        Ok(next_state)
+
+        Ok(PlayResult {
+            state: next_state,
+            placed_at: Position::new(column.x, column.y, z),
+        })
     }
 }
 
@@ -302,11 +352,12 @@ mod tests {
 
         assert_eq!(state.next_empty_z(column), Some(0));
 
-        let next_state = state.play(column).unwrap();
+        let result = state.play(column).unwrap();
 
-        assert_eq!(next_state.board[0][1][2], Cell::Black);
-        assert_eq!(next_state.turn, Player::White);
-        assert_eq!(next_state.moves_played, 1);
+        assert_eq!(result.placed_at, Position::new(2, 1, 0));
+        assert_eq!(result.state.board[0][1][2], Cell::Black);
+        assert_eq!(result.state.turn, Player::White);
+        assert_eq!(result.state.moves_played, 1);
     }
 
     /// 同じ柱に続けて置くと、コマは `z = 0` から順番に積み上がる。
@@ -315,12 +366,12 @@ mod tests {
     #[test]
     fn pieces_stack_in_the_same_column() {
         let column = Column::new(0, 0);
-        let state = GameState::initial()
-            .play(column)
-            .unwrap()
-            .play(column)
-            .unwrap();
+        let first_result = GameState::initial().play(column).unwrap();
+        let second_result = first_result.state.play(column).unwrap();
+        let state = second_result.state;
 
+        assert_eq!(first_result.placed_at, Position::new(0, 0, 0));
+        assert_eq!(second_result.placed_at, Position::new(0, 0, 1));
         assert_eq!(state.board[0][0][0], Cell::Black);
         assert_eq!(state.board[1][0][0], Cell::White);
         assert_eq!(state.board[2][0][0], Cell::Empty);
@@ -334,7 +385,7 @@ mod tests {
         let mut state = GameState::initial();
 
         for _ in 0..BOARD_SIZE {
-            state = state.play(full_column).unwrap();
+            state = state.play(full_column).unwrap().state;
         }
 
         assert_eq!(state.next_empty_z(full_column), None);
