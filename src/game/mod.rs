@@ -6,12 +6,14 @@
 mod cell;
 mod constants;
 mod coordinate;
+mod line;
 mod player;
 mod state;
 
 pub use cell::Cell;
 pub use constants::{BOARD_SIZE, CELL_COUNT, COLUMN_COUNT};
 pub use coordinate::{Column, Position};
+pub use line::{ALL_DIRECTIONS, Direction};
 pub use player::Player;
 pub use state::{Board, GameState, PlayError, PlayResult};
 
