@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::env;
+use std::time::Instant;
 
 use rittai4moku::game::{GameState, GameStatus};
 
@@ -18,7 +19,7 @@ use rittai4moku::game::{GameState, GameStatus};
 /// 使い方:
 ///
 /// ```text
-/// cargo run --example frontier_counts -- 8
+/// cargo run --release --example frontier_counts -- 8
 /// ```
 ///
 /// 引数を省略した場合は、8手目まで数える。
@@ -35,10 +36,11 @@ fn main() {
 
     println!("max_ply: {max_ply}");
     println!(
-        "ply,frontier,terminal_immediate_win,terminal_draw,expanded,children_generated,next_unique,duplicate_children,estimated_frontier_key_mib,estimated_next_key_mib"
+        "ply,frontier,terminal_immediate_win,terminal_draw,expanded,children_generated,next_unique,duplicate_children,estimated_frontier_key_mib,estimated_next_key_mib,elapsed_ms"
     );
 
     for ply in 0..=max_ply {
+        let started_at = Instant::now();
         let mut next_frontier = HashSet::new();
         let mut terminal_immediate_win = 0_u64;
         let mut terminal_draw = 0_u64;
@@ -75,11 +77,12 @@ fn main() {
         let duplicate_children = children_generated.saturating_sub(next_frontier.len() as u64);
 
         println!(
-            "{ply},{},{terminal_immediate_win},{terminal_draw},{expanded},{children_generated},{},{duplicate_children},{:.3},{:.3}",
+            "{ply},{},{terminal_immediate_win},{terminal_draw},{expanded},{children_generated},{},{duplicate_children},{:.3},{:.3},{}",
             frontier.len(),
             next_frontier.len(),
             estimated_key_mib(frontier.len()),
             estimated_key_mib(next_frontier.len()),
+            started_at.elapsed().as_millis(),
         );
 
         frontier = next_frontier;
