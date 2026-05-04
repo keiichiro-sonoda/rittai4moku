@@ -19,6 +19,23 @@ pub enum Cell {
 }
 
 impl Cell {
+    /// 盤面を3進数として数値化するときの桁の値を返す。
+    ///
+    /// 1マスは「空・白・黒」の3状態なので、3進数の1桁として表せる。
+    ///
+    /// - `Cell::Empty` は `0`
+    /// - `Cell::Black` は `1`
+    /// - `Cell::White` は `2`
+    ///
+    /// 黒を1、白を2にしているのは、先手の黒を先に扱うと読みやすいため。
+    pub const fn base3_digit(self) -> u128 {
+        match self {
+            Self::Empty => 0,
+            Self::Black => 1,
+            Self::White => 2,
+        }
+    }
+
     /// このマスに置かれているコマのプレイヤーを返す。
     ///
     /// `Cell::White` なら `Some(Player::White)`、

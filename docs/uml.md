@@ -18,6 +18,7 @@ classDiagram
         +u8 moves_played
         +initial() GameState
         +is_full() bool
+        +board_key_base3() u128
         +next_empty_z(Column) Option~usize~
         +is_column_full(Column) bool
         +legal_moves() Vec~Column~
@@ -40,6 +41,7 @@ classDiagram
         Empty
         White
         Black
+        +base3_digit() u128
         +player() Option~Player~
     }
 
@@ -227,3 +229,26 @@ flowchart TD
 この図の流れは、`GameState::status_after_move` として実装済みです。
 
 勝敗判定のテストでは、通常の `play` で作る局面に加えて、盤面を直接組み立てるテストも使います。重力ありルールでは斜め方向の特定配置を合法手だけで作る準備が複雑になるため、勝敗判定ロジック単体を確認したい場合は直接盤面を作ります。
+
+## 盤面キーの生成
+
+```mermaid
+flowchart TD
+    start["board_key_base3"]
+    order["z -> y -> x の順に走査\nxが最速で進む"]
+    digit["Cell::base3_digit\nEmpty=0 Black=1 White=2"]
+    place["place = 1, 3, 9, ..."]
+    add["key += digit * place"]
+    next["place *= 3"]
+    done["u128 の盤面キー"]
+
+    start --> order
+    order --> digit
+    digit --> place
+    place --> add
+    add --> next
+    next --> order
+    order --> done
+```
+
+最初のマス `(0, 0, 0)` は3進数の最下位桁として扱います。走査順は `(0,0,0)`, `(1,0,0)`, ..., `(3,3,0)`, `(0,0,1)`, ... です。

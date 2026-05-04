@@ -153,6 +153,42 @@ impl GameState {
         self.board[position.z][position.y][position.x]
     }
 
+    /// 盤面だけを3進数表現のキーに変換する。
+    ///
+    /// ここでいうキーは、探索済み状態を `HashMap` などに保存するときに使う
+    /// 「盤面の背番号」のようなもの。
+    ///
+    /// 各マスは `Cell::base3_digit` により、次の3状態として扱う。
+    ///
+    /// - 空: 0
+    /// - 黒: 1
+    /// - 白: 2
+    ///
+    /// 走査順は次の通り。
+    ///
+    /// 1. `(x, y, z) = (0, 0, 0)` から始める
+    /// 2. xを最速で進める
+    /// 3. xが3まで進んだら、次にyを進める
+    /// 4. yが3まで進んだら、次にzを進める
+    ///
+    /// つまり、ループとしては `z -> y -> x` の順に回す。
+    /// 最初に読んだ `(0, 0, 0)` は3進数の最下位桁になる。
+    pub fn board_key_base3(&self) -> u128 {
+        let mut key = 0;
+        let mut place = 1;
+
+        for z in 0..BOARD_SIZE {
+            for y in 0..BOARD_SIZE {
+                for x in 0..BOARD_SIZE {
+                    key += self.board[z][y][x].base3_digit() * place;
+                    place *= 3;
+                }
+            }
+        }
+
+        key
+    }
+
     /// 指定した位置の隣から、指定方向へ同じマス状態が何個続くかを数える。
     ///
     /// `start` 自身は数えない。`direction` に1歩進んだ場所から数え始める。
@@ -293,11 +329,15 @@ mod tests {
         assert_eq!(state.turn, Player::Black);
         assert_eq!(state.turn.cell(), Cell::Black);
         assert_eq!(state.turn.next(), Player::White);
+        assert_eq!(Cell::Empty.base3_digit(), 0);
+        assert_eq!(Cell::Black.base3_digit(), 1);
+        assert_eq!(Cell::White.base3_digit(), 2);
         assert_eq!(Cell::Black.player(), Some(Player::Black));
         assert_eq!(Cell::White.player(), Some(Player::White));
         assert_eq!(Cell::Empty.player(), None);
         assert_eq!(state.moves_played, 0);
         assert!(!state.is_full());
+        assert_eq!(state.board_key_base3(), 0);
         assert_eq!(state.legal_moves().len(), COLUMN_COUNT);
         assert!(
             state
@@ -377,6 +417,45 @@ mod tests {
 
         assert_eq!(result.state.cell_at(Position::new(2, 1, 0)), Cell::Black);
         assert_eq!(result.state.cell_at(Position::new(2, 1, 1)), Cell::Empty);
+    }
+
+    /// 3進数キーでは、最初のマス `(0, 0, 0)` が最下位桁になる。
+    #[test]
+    fn board_key_base3_uses_origin_as_lowest_digit() {
+        let result = GameState::initial().play(Column::new(0, 0)).unwrap();
+
+        assert_eq!(result.state.board_key_base3(), 1);
+    }
+
+    /// xが最速で進むため、`(1, 0, 0)` は3進数の2桁目になる。
+    #[test]
+    fn board_key_base3_advances_x_first() {
+        let result = GameState::initial().play(Column::new(1, 0)).unwrap();
+
+        assert_eq!(result.state.board_key_base3(), 3);
+    }
+
+    /// xが3まで進んだ後にyが進むため、`(0, 1, 0)` は3進数の5桁目になる。
+    #[test]
+    fn board_key_base3_advances_y_after_x() {
+        let result = GameState::initial().play(Column::new(0, 1)).unwrap();
+
+        assert_eq!(result.state.board_key_base3(), 3_u128.pow(4));
+    }
+
+    /// 同じ柱に2手置くと、黒と白が別々の高さの桁としてキーに反映される。
+    #[test]
+    fn board_key_base3_encodes_stacked_black_and_white_cells() {
+        let column = Column::new(0, 0);
+        let state = GameState::initial()
+            .play(column)
+            .unwrap()
+            .state
+            .play(column)
+            .unwrap()
+            .state;
+
+        assert_eq!(state.board_key_base3(), 1 + 2 * 3_u128.pow(16));
     }
 
     /// 指定方向に同じ色が続いている間だけ数える。
