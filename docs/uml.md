@@ -23,6 +23,9 @@ classDiagram
         +legal_moves() Vec~Column~
         +cell_at(Position) Cell
         +count_same_cells(Position, Direction, Cell) usize
+        +count_line_cells(Position, Direction, Cell) usize
+        +is_winning_line(Position, Direction) bool
+        +is_winning_position(Position) bool
         +play(Column) Result~PlayResult, PlayError~
     }
 
@@ -178,4 +181,4 @@ flowchart TD
     win -->|no| resultContinue["その方向では勝ちではない"]
 ```
 
-この最後の図は、まだ完全には実装していない次の段階を表します。現在は `count_same_cells` まで実装済みなので、次は正方向と逆方向を合計して4個以上か判定します。
+この最後の図の流れは、`GameState::is_winning_position` として実装済みです。次はこの判定を使って、ゲーム全体が進行中・勝ち・引き分けのどれかを表す型へ進みます。

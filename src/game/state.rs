@@ -1,4 +1,4 @@
-use super::{BOARD_SIZE, CELL_COUNT, Cell, Column, Direction, Player, Position};
+use super::{ALL_DIRECTIONS, BOARD_SIZE, CELL_COUNT, Cell, Column, Direction, Player, Position};
 
 /// 立体4目並べの盤面。
 ///
@@ -163,6 +163,42 @@ impl GameState {
         }
 
         count
+    }
+
+    /// 起点を中心に、指定方向の直線上で同じマス状態が何個つながっているかを数える。
+    ///
+    /// `count_same_cells` は片方向だけを数えるが、この関数は次の3つを足す。
+    ///
+    /// - `direction` 方向に続く個数
+    /// - `direction.opposite()` 方向に続く個数
+    /// - 起点 `start` 自身の1個
+    ///
+    /// 例えば、横方向に `黒 黒 黒 黒` と並んでいて、起点が内側の黒なら、
+    /// 左右を合算して4個と数えられる。
+    pub fn count_line_cells(&self, start: Position, direction: Direction, target: Cell) -> usize {
+        self.count_same_cells(start, direction, target)
+            + self.count_same_cells(start, direction.opposite(), target)
+            + 1
+    }
+
+    /// 指定した位置のコマが、指定方向で4つ以上つながっているかを返す。
+    ///
+    /// 空きマスは勝ち判定の起点にならないので、`Cell::Empty` の場合は `false` を返す。
+    /// 立体4目並べでは4個並べば勝ちなので、`BOARD_SIZE` 個以上つながっていれば勝ちとする。
+    pub fn is_winning_line(&self, start: Position, direction: Direction) -> bool {
+        let target = self.cell_at(start);
+
+        target != Cell::Empty && self.count_line_cells(start, direction, target) >= BOARD_SIZE
+    }
+
+    /// 指定した位置のコマによって勝ちが成立しているかを返す。
+    ///
+    /// 最後に置かれた `Position` を渡して使う想定。
+    /// 代表13方向をすべて調べ、どれか1方向でも4つ以上つながっていれば勝ちになる。
+    pub fn is_winning_position(&self, start: Position) -> bool {
+        ALL_DIRECTIONS
+            .iter()
+            .any(|&direction| self.is_winning_line(start, direction))
     }
 
     /// 指定した柱に現在の手番のコマを落とし、着手結果を返す。
@@ -339,5 +375,54 @@ mod tests {
             ),
             0
         );
+    }
+
+    /// 正方向・逆方向・起点自身を合計して、直線上の同じ色の数を数える。
+    #[test]
+    fn count_line_cells_counts_both_directions_and_start() {
+        let mut state = GameState::initial();
+        state = state.play(Column::new(0, 0)).unwrap().state;
+        state = state.play(Column::new(0, 1)).unwrap().state;
+        state = state.play(Column::new(1, 0)).unwrap().state;
+        state = state.play(Column::new(1, 1)).unwrap().state;
+        state = state.play(Column::new(2, 0)).unwrap().state;
+        state = state.play(Column::new(2, 1)).unwrap().state;
+        state = state.play(Column::new(3, 0)).unwrap().state;
+
+        assert_eq!(
+            state.count_line_cells(Position::new(1, 0, 0), Direction::new(1, 0, 0), Cell::Black),
+            4
+        );
+    }
+
+    /// 4つ以上つながっている方向があれば、その位置は勝ちになる。
+    #[test]
+    fn is_winning_position_returns_true_for_four_in_a_row() {
+        let mut state = GameState::initial();
+        state = state.play(Column::new(0, 0)).unwrap().state;
+        state = state.play(Column::new(0, 1)).unwrap().state;
+        state = state.play(Column::new(1, 0)).unwrap().state;
+        state = state.play(Column::new(1, 1)).unwrap().state;
+        state = state.play(Column::new(2, 0)).unwrap().state;
+        state = state.play(Column::new(2, 1)).unwrap().state;
+        let result = state.play(Column::new(3, 0)).unwrap();
+
+        assert!(result.state.is_winning_position(result.placed_at));
+    }
+
+    /// 4つつながっていない場合は勝ちにならない。
+    #[test]
+    fn is_winning_position_returns_false_without_four_in_a_row() {
+        let result = GameState::initial().play(Column::new(0, 0)).unwrap();
+
+        assert!(!result.state.is_winning_position(result.placed_at));
+    }
+
+    /// 空きマスは勝ち判定の起点にならない。
+    #[test]
+    fn is_winning_position_returns_false_for_empty_cell() {
+        let state = GameState::initial();
+
+        assert!(!state.is_winning_position(Position::new(0, 0, 0)));
     }
 }
