@@ -196,9 +196,15 @@ impl GameState {
     /// 最後に置かれた `Position` を渡して使う想定。
     /// 代表13方向をすべて調べ、どれか1方向でも4つ以上つながっていれば勝ちになる。
     pub fn is_winning_position(&self, start: Position) -> bool {
+        let target = self.cell_at(start);
+
+        if target == Cell::Empty {
+            return false;
+        }
+
         ALL_DIRECTIONS
             .iter()
-            .any(|&direction| self.is_winning_line(start, direction))
+            .any(|&direction| self.count_line_cells(start, direction, target) >= BOARD_SIZE)
     }
 
     /// 指定した柱に現在の手番のコマを落とし、着手結果を返す。

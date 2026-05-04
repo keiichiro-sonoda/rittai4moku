@@ -165,13 +165,18 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     placed["最後に置かれた Position"]
+    target["起点の Cell を1回だけ確認"]
+    empty{"Cell::Empty？"}
     dirs["ALL_DIRECTIONS\n代表13方向"]
     forward["direction 方向へ\ncount_same_cells"]
     backward["opposite 方向へ\ncount_same_cells"]
     total["forward + backward + 1"]
     win{"4個以上？"}
 
-    placed --> dirs
+    placed --> target
+    target --> empty
+    empty -->|yes| resultNotWin["勝ちではない"]
+    empty -->|no| dirs
     dirs --> forward
     dirs --> backward
     forward --> total
@@ -182,3 +187,5 @@ flowchart TD
 ```
 
 この最後の図の流れは、`GameState::is_winning_position` として実装済みです。次はこの判定を使って、ゲーム全体が進行中・勝ち・引き分けのどれかを表す型へ進みます。
+
+位置ごとに「この方向では4つ並びようがない」と分かる場合、その方向を事前に省く最適化も考えられます。ただし、今は勝敗判定の正しさと理解しやすさを優先し、その最適化は後回しにします。
