@@ -21,6 +21,14 @@ cargo run             # 現状は初期状態を表示するだけ
 
 整形は `cargo fmt --all`、静的解析は `cargo clippy --all-targets -- -D warnings`。
 
+状態数の増え方を調べる実験:
+
+```bash
+cargo run --example frontier_counts -- 8
+```
+
+この example は、正規化なしで手数ごとの一意な盤面キー数を数える。現在手数と次手数の集合だけを持ち、過去手数との重複排除はしない。「次の一手で勝てる状態」は葉として扱い、それ以上展開しない。
+
 ## ディレクトリ
 
 ```text
@@ -41,6 +49,9 @@ src/
     ├── outcome.rs     手番側から見た探索結果 Outcome と終局状態からの変換
     ├── memo.rs        盤面キーから Outcome を取り出す MemoTable
     └── search.rs      再帰探索の最小実装
+
+examples/
+└── frontier_counts.rs 正規化なしの手数別状態数を測る実験
 
 docs/
 ├── adr/               設計判断の記録（1 判断 1 ファイル）
