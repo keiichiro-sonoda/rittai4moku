@@ -21,6 +21,7 @@
   - `Loss`
   - `Draw`
 - `Outcome` は「次に手を打つプレイヤーから見た結果」として読む。
+- `Outcome::from_status_for_player(status, perspective)` で、終局状態の `GameStatus` を指定プレイヤー視点の `Outcome` に変換する。
 - メモ化用に `MemoTable` を定義する。
 - `MemoTable` は内部で `HashMap<u128, Outcome>` を持つ。
 - キーには `GameState::board_key_base3()` を使う。
@@ -30,6 +31,7 @@
 - `game` は立体4目並べのルールそのものを表す層として保ちたい。探索やメモ化はルールの外側でゲームを解く処理なので、`solver` に分ける。
 - `HashMap<u128, Outcome>` を直接あちこちで使うより、`MemoTable` に包む方が「何をキーにして何を保存するのか」が読みやすい。
 - `Outcome` を `GameStatus` と分けることで、「ゲームの進行状態」と「探索で見た勝ち負け」を混ぜずに済む。
+- `GameStatus::InProgress` はまだ結果ではないため、`Outcome` への変換結果は `None` にする。進行中の局面は、合法手を調べて初めて `Outcome` が決まる。
 
 ## 影響
 

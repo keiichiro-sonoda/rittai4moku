@@ -1,3 +1,5 @@
+use crate::game::{GameStatus, Player};
+
 /// 探索で得られる局面の結果。
 ///
 /// `GameStatus` は「ゲームが進行中か、誰が勝ったか」という
@@ -18,4 +20,78 @@ pub enum Outcome {
 
     /// どちらも勝ちを強制できず、引き分けになる局面。
     Draw,
+}
+
+impl Outcome {
+    /// `GameStatus` を、指定したプレイヤーから見た `Outcome` に変換する。
+    ///
+    /// `GameStatus` は「ゲームが進行中か」「誰が勝ったか」を表す。
+    /// それに対して `Outcome` は「あるプレイヤーから見て勝ちか負けか」を表す。
+    /// そのため、変換には `perspective`、つまり評価するプレイヤーが必要になる。
+    ///
+    /// - `GameStatus::Win(winner)` で `winner == perspective` なら `Some(Outcome::Win)`
+    /// - `GameStatus::Win(winner)` で `winner != perspective` なら `Some(Outcome::Loss)`
+    /// - `GameStatus::Draw` なら、誰から見ても `Some(Outcome::Draw)`
+    /// - `GameStatus::InProgress` はまだ結果が決まっていないため `None`
+    ///
+    /// 将来の探索では、終局状態だけをこの関数で `Outcome` に変換し、
+    /// 進行中の状態は合法手を再帰的に調べて `Outcome` を決める。
+    pub fn from_status_for_player(status: GameStatus, perspective: Player) -> Option<Self> {
+        match status {
+            GameStatus::InProgress => None,
+            GameStatus::Draw => Some(Self::Draw),
+            GameStatus::Win(winner) => {
+                if winner == perspective {
+                    Some(Self::Win)
+                } else {
+                    Some(Self::Loss)
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 勝者本人から見れば、勝ちの終局状態は `Outcome::Win` になる。
+    #[test]
+    fn win_status_is_win_from_winners_perspective() {
+        assert_eq!(
+            Outcome::from_status_for_player(GameStatus::Win(Player::Black), Player::Black),
+            Some(Outcome::Win)
+        );
+    }
+
+    /// 勝者ではない側から見れば、勝ちの終局状態は `Outcome::Loss` になる。
+    #[test]
+    fn win_status_is_loss_from_losers_perspective() {
+        assert_eq!(
+            Outcome::from_status_for_player(GameStatus::Win(Player::Black), Player::White),
+            Some(Outcome::Loss)
+        );
+    }
+
+    /// 引き分けは、どちらのプレイヤーから見ても `Outcome::Draw` になる。
+    #[test]
+    fn draw_status_is_draw_from_any_perspective() {
+        assert_eq!(
+            Outcome::from_status_for_player(GameStatus::Draw, Player::Black),
+            Some(Outcome::Draw)
+        );
+        assert_eq!(
+            Outcome::from_status_for_player(GameStatus::Draw, Player::White),
+            Some(Outcome::Draw)
+        );
+    }
+
+    /// 進行中の状態はまだ探索結果ではないため、`Outcome` には変換しない。
+    #[test]
+    fn in_progress_status_has_no_outcome_yet() {
+        assert_eq!(
+            Outcome::from_status_for_player(GameStatus::InProgress, Player::Black),
+            None
+        );
+    }
 }

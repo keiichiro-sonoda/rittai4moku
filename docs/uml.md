@@ -101,6 +101,7 @@ classDiagram
         Win
         Loss
         Draw
+        +from_status_for_player(GameStatus, Player) Option~Outcome~
     }
 
     class MemoTable {
@@ -129,6 +130,8 @@ classDiagram
     Direction ..> Position
     MemoTable ..> GameState
     MemoTable --> Outcome
+    Outcome ..> GameStatus
+    Outcome ..> Player
 ```
 
 ## モジュールの関係
@@ -337,3 +340,31 @@ flowchart TD
 ```
 
 メモ化は「同じ局面をもう一度調べない」ための仕組みです。現在は探索本体をまだ実装せず、`MemoTable` で盤面キーと `Outcome` を保存・取得するところだけを確認します。
+
+## GameStatus から Outcome への変換
+
+```mermaid
+flowchart TD
+    status["GameStatus"]
+    perspective["評価する Player"]
+    inProgress{"InProgress？"}
+    draw{"Draw？"}
+    win["Win(winner)"]
+    same{"winner == perspective？"}
+    none["None"]
+    outcomeDraw["Some(Outcome::Draw)"]
+    outcomeWin["Some(Outcome::Win)"]
+    outcomeLoss["Some(Outcome::Loss)"]
+
+    status --> inProgress
+    perspective --> same
+    inProgress -->|yes| none
+    inProgress -->|no| draw
+    draw -->|yes| outcomeDraw
+    draw -->|no| win
+    win --> same
+    same -->|yes| outcomeWin
+    same -->|no| outcomeLoss
+```
+
+`GameStatus` は「ゲームとしてどうなっているか」を表し、`Outcome` は「指定したプレイヤーから見てどうか」を表します。そのため、勝ち状態を `Outcome` に変換するときは、勝者と評価するプレイヤーを比較します。進行中の状態はまだ探索結果ではないので `None` にします。
