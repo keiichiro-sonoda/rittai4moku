@@ -23,6 +23,23 @@ pub enum Outcome {
 }
 
 impl Outcome {
+    /// 評価する視点を相手側へ反転した結果を返す。
+    ///
+    /// 再帰探索では、自分が1手打つと次は相手番になる。
+    /// そのため、子局面を調べて得られる `Outcome` は「相手から見た結果」になる。
+    /// それを親局面の自分から見た結果へ戻すために、この関数を使う。
+    ///
+    /// - 相手から見て `Win` なら、自分から見れば `Loss`
+    /// - 相手から見て `Loss` なら、自分から見れば `Win`
+    /// - `Draw` はどちらから見ても `Draw`
+    pub const fn flip(self) -> Self {
+        match self {
+            Self::Win => Self::Loss,
+            Self::Loss => Self::Win,
+            Self::Draw => Self::Draw,
+        }
+    }
+
     /// `GameStatus` を、指定したプレイヤーから見た `Outcome` に変換する。
     ///
     /// `GameStatus` は「ゲームが進行中か」「誰が勝ったか」を表す。
@@ -93,5 +110,26 @@ mod tests {
             Outcome::from_status_for_player(GameStatus::InProgress, Player::Black),
             None
         );
+    }
+
+    /// 視点を反転すると、勝ちは負けに、負けは勝ちになる。
+    #[test]
+    fn flip_swaps_win_and_loss() {
+        assert_eq!(Outcome::Win.flip(), Outcome::Loss);
+        assert_eq!(Outcome::Loss.flip(), Outcome::Win);
+    }
+
+    /// 引き分けは、どちらの視点から見ても引き分けのまま。
+    #[test]
+    fn flip_keeps_draw_as_draw() {
+        assert_eq!(Outcome::Draw.flip(), Outcome::Draw);
+    }
+
+    /// 2回反転すると、元の視点に戻る。
+    #[test]
+    fn flipping_twice_returns_original_outcome() {
+        for outcome in [Outcome::Win, Outcome::Loss, Outcome::Draw] {
+            assert_eq!(outcome.flip().flip(), outcome);
+        }
     }
 }

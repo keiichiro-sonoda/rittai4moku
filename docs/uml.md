@@ -101,6 +101,7 @@ classDiagram
         Win
         Loss
         Draw
+        +flip() Outcome
         +from_status_for_player(GameStatus, Player) Option~Outcome~
     }
 
@@ -368,3 +369,26 @@ flowchart TD
 ```
 
 `GameStatus` は「ゲームとしてどうなっているか」を表し、`Outcome` は「指定したプレイヤーから見てどうか」を表します。そのため、勝ち状態を `Outcome` に変換するときは、勝者と評価するプレイヤーを比較します。進行中の状態はまだ探索結果ではないので `None` にします。
+
+## Outcome の視点反転
+
+```mermaid
+flowchart LR
+    child["子局面の Outcome\n相手視点"]
+    flip["flip()"]
+    parent["親局面の Outcome\n自分視点"]
+
+    win["Win"]
+    loss["Loss"]
+    draw["Draw"]
+    flippedLoss["Loss"]
+    flippedWin["Win"]
+    flippedDraw["Draw"]
+
+    child --> flip --> parent
+    win --> flippedLoss
+    loss --> flippedWin
+    draw --> flippedDraw
+```
+
+自分が1手打った後の局面は相手番です。その子局面を解いて返ってくる `Outcome` は相手から見た結果なので、親局面で読むときは `flip()` で視点を戻します。

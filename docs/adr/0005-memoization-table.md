@@ -21,6 +21,7 @@
   - `Loss`
   - `Draw`
 - `Outcome` は「次に手を打つプレイヤーから見た結果」として読む。
+- `Outcome::flip()` で、相手から見た結果を自分から見た結果へ反転する。
 - `Outcome::from_status_for_player(status, perspective)` で、終局状態の `GameStatus` を指定プレイヤー視点の `Outcome` に変換する。
 - メモ化用に `MemoTable` を定義する。
 - `MemoTable` は内部で `HashMap<u128, Outcome>` を持つ。
@@ -32,6 +33,7 @@
 - `HashMap<u128, Outcome>` を直接あちこちで使うより、`MemoTable` に包む方が「何をキーにして何を保存するのか」が読みやすい。
 - `Outcome` を `GameStatus` と分けることで、「ゲームの進行状態」と「探索で見た勝ち負け」を混ぜずに済む。
 - `GameStatus::InProgress` はまだ結果ではないため、`Outcome` への変換結果は `None` にする。進行中の局面は、合法手を調べて初めて `Outcome` が決まる。
+- 再帰探索では、自分が1手打った後の子局面は相手番になる。子局面の結果は相手視点なので、親局面へ戻すときに `flip()` が必要になる。
 
 ## 影響
 
