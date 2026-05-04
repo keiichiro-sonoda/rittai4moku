@@ -24,10 +24,11 @@ cargo run             # 現状は初期状態を表示するだけ
 状態数の増え方を調べる実験:
 
 ```bash
-cargo run --release --example frontier_counts -- 8
+cargo run --release --example frontier_counts -- 8 raw
+cargo run --release --example frontier_counts -- 8 normalized
 ```
 
-この example は、正規化なしで手数ごとの一意な盤面キー数を数える。現在手数と次手数の集合だけを持ち、過去手数との重複排除はしない。「次の一手で勝てる状態」は葉として扱い、それ以上展開しない。
+この example は、手数ごとの一意な盤面キー数を数える。`raw` は正規化なし、`normalized` は `GameState::normalized_key()` による正規化あり。現在手数と次手数の集合だけを持ち、過去手数との重複排除はしない。「次の一手で勝てる状態」は葉として扱い、それ以上展開しない。
 メモリ使用量も見たい場合は `/usr/bin/time -v` を付けて実行する。
 
 ## ディレクトリ

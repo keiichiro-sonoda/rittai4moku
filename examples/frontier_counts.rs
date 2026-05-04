@@ -4,14 +4,45 @@ use std::time::Instant;
 
 use rittai4moku::game::{GameState, GameStatus};
 
-/// 正規化なしで、手数ごとの到達可能状態数を数える実験プログラム。
+#[derive(Debug, Clone, Copy)]
+enum KeyMode {
+    Raw,
+    Normalized,
+}
+
+impl KeyMode {
+    fn parse(value: &str) -> Self {
+        match value {
+            "raw" => Self::Raw,
+            "normalized" => Self::Normalized,
+            _ => panic!("mode must be either 'raw' or 'normalized'"),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Raw => "raw",
+            Self::Normalized => "normalized",
+        }
+    }
+
+    fn key_for(self, state: &GameState) -> u128 {
+        match self {
+            Self::Raw => state.board_key_base3(),
+            Self::Normalized => state.normalized_key(),
+        }
+    }
+}
+
+/// 手数ごとの到達可能状態数を数える実験プログラム。
 ///
 /// この example は完全解析そのものではなく、
-/// 「正規化しないと、どの手数で状態数がどれくらい増えるのか」を測るための道具。
+/// 「正規化すると、手数ごとの状態数がどれくらい減るのか」を測るための道具。
 ///
 /// 重要な前提:
 ///
-/// - 状態は `GameState::board_key_base3()` の `u128` で保存する
+/// - `raw` モードでは `GameState::board_key_base3()` の `u128` で保存する
+/// - `normalized` モードでは `GameState::normalized_key()` の `u128` で保存する
 /// - 異なる手数の状態は同じ盤面にならないので、過去手数との重複排除はしない
 /// - 同じ手数の別経路から同じ盤面に到達する可能性はあるので、同一手数内では重複排除する
 /// - 「次の一手で勝てる状態」は葉として扱い、それ以上展開しない
@@ -19,22 +50,29 @@ use rittai4moku::game::{GameState, GameStatus};
 /// 使い方:
 ///
 /// ```text
-/// cargo run --release --example frontier_counts -- 8
+/// cargo run --release --example frontier_counts -- 8 raw
+/// cargo run --release --example frontier_counts -- 8 normalized
 /// ```
 ///
-/// 引数を省略した場合は、8手目まで数える。
+/// 手数を省略した場合は8手目まで、モードを省略した場合は `raw` で数える。
 fn main() {
-    let max_ply = env::args()
-        .nth(1)
+    let mut args = env::args().skip(1);
+    let max_ply = args
+        .next()
         .map(|arg| {
             arg.parse::<u8>()
                 .expect("max ply must be an integer between 0 and 255")
         })
         .unwrap_or(8);
+    let key_mode = args
+        .next()
+        .map(|arg| KeyMode::parse(&arg))
+        .unwrap_or(KeyMode::Raw);
 
-    let mut frontier = HashSet::from([GameState::initial().board_key_base3()]);
+    let mut frontier = HashSet::from([key_mode.key_for(&GameState::initial())]);
 
     println!("max_ply: {max_ply}");
+    println!("mode: {}", key_mode.as_str());
     println!(
         "ply,frontier,terminal_immediate_win,terminal_draw,expanded,children_generated,next_unique,duplicate_children,estimated_frontier_key_mib,estimated_next_key_mib,elapsed_ms"
     );
@@ -68,7 +106,7 @@ fn main() {
                     let result = state
                         .play(column)
                         .expect("legal_moves should only return playable columns");
-                    next_frontier.insert(result.state.board_key_base3());
+                    next_frontier.insert(key_mode.key_for(&result.state));
                     children_generated += 1;
                 }
             }
