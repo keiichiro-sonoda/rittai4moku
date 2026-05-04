@@ -57,6 +57,7 @@ docs/
 - **盤面は 3進数キー（`u128`）に往復できる**（[ADR-0003](docs/adr/0003-base3-board-key.md)）。探索結果を `HashMap` などに保存する将来計画の足場。
 - **メモ化は `MemoTable` から始める**（[ADR-0005](docs/adr/0005-memoization-table.md)）。まずはメモリ上で、盤面キーから探索結果を保存・取得する。
 - **`GameStatus` と `Outcome` を分ける**。進行中・勝者・引き分けというゲーム状態ラベルを、探索用には「手番側から見た勝ち・負け・引き分け」に変換し、子局面の結果は `Outcome::flip()` で親局面の視点に戻す。
+- **最初の `Outcome` は手数を持たない**。完全解析の分類を先に完成させ、対戦AIで早勝ち・遅負けを扱う段階で `plies` 付き表現を検討する。
 - **盤面表現は速度より読みやすさを優先する**（[ADR-0001](docs/adr/0001-board-representation.md)、[ADR-0002](docs/adr/0002-redundant-turn-and-moves-played.md)）。
 
 ## 学習リポジトリとしてのスタンス
