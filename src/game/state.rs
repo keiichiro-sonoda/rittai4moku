@@ -279,7 +279,7 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::{COLUMN_COUNT, Direction, GameStatus};
+    use crate::game::{ALL_DIRECTIONS, COLUMN_COUNT, Direction, GameStatus};
 
     /// 初期状態が「空の盤面・黒番・0手目」になっていることを確認する。
     ///
@@ -517,5 +517,98 @@ mod tests {
 
         assert!(!state.is_winning_position(placed_at));
         assert_eq!(state.status_after_move(placed_at), GameStatus::Draw);
+    }
+
+    /// 勝敗判定で調べる代表13方向すべてで、4つ並びを検出できる。
+    ///
+    /// 斜め方向の一部は合法手だけで狙った形を作る準備が複雑になる。
+    /// ここでは重力のテストではなく勝敗判定ロジックのテストとして、盤面を直接作る。
+    #[test]
+    fn is_winning_position_detects_all_representative_directions() {
+        for direction in ALL_DIRECTIONS {
+            let (state, placed_at) = state_with_black_line(direction);
+
+            assert!(
+                state.is_winning_position(placed_at),
+                "direction should be winning: {:?}",
+                direction
+            );
+            assert_eq!(
+                state.status_after_move(placed_at),
+                GameStatus::Win(Player::Black),
+                "direction should produce black win: {:?}",
+                direction
+            );
+        }
+    }
+
+    /// 指定した方向に黒コマ4つが一直線に並ぶテスト用状態を作る。
+    ///
+    /// この関数は、実際の合法手順を再現するためのものではない。
+    /// 目的は「勝敗判定が、13個ある代表方向すべてを正しく見つけられるか」を
+    /// 直接確認すること。
+    ///
+    /// そのため、`play` を使わずに `board` を直接組み立てる。
+    /// `placed_at` には、作った黒ラインの始点を返す。
+    /// 勝敗判定は始点からでも中央からでも成立するが、始点を返すことで
+    /// 「正方向に3個続く」ケースを明確に確認できる。
+    fn state_with_black_line(direction: Direction) -> (GameState, Position) {
+        let mut board = [[[Cell::Empty; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
+        let mut position = line_start_for(direction);
+        let placed_at = position;
+
+        for step in 0..BOARD_SIZE {
+            board[position.z][position.y][position.x] = Cell::Black;
+
+            if step + 1 < BOARD_SIZE {
+                position = direction
+                    .step_from(position)
+                    .expect("test line should stay inside the board");
+            }
+        }
+
+        (
+            GameState {
+                board,
+                turn: Player::Black,
+                moves_played: BOARD_SIZE as u8,
+            },
+            placed_at,
+        )
+    }
+
+    /// 指定した方向に4マス進んでも盤面外に出ない始点を返す。
+    ///
+    /// 例えば方向が `(1, 0, 0)` なら、x方向に右へ進むので始点のxは `0`。
+    /// 方向が `(-1, 0, 0)` なら、x方向に左へ進むので始点のxは `3`。
+    /// 方向が `(0, 1, 0)` のようにxが動かない場合、xはどこでもよいので
+    /// ここでは中央寄りの `1` を使う。
+    ///
+    /// この考え方をx, y, zそれぞれに適用して、テスト用の始点を作る。
+    fn line_start_for(direction: Direction) -> Position {
+        Position::new(
+            line_start_coordinate(direction.dx),
+            line_start_coordinate(direction.dy),
+            line_start_coordinate(direction.dz),
+        )
+    }
+
+    /// 1つの座標軸について、4マスラインの始点座標を決める。
+    ///
+    /// `delta` はその軸方向にどう進むかを表す。
+    ///
+    /// - `-1`: 負方向に進むので、端の `BOARD_SIZE - 1` から始める
+    /// - `0`: その軸では動かないので、盤面内の固定値 `1` を使う
+    /// - `1`: 正方向に進むので、端の `0` から始める
+    ///
+    /// `ALL_DIRECTIONS` は各成分が `-1, 0, 1` の方向だけを持つ前提なので、
+    /// それ以外が来た場合はテストの前提違反として `panic!` する。
+    fn line_start_coordinate(delta: isize) -> usize {
+        match delta {
+            -1 => BOARD_SIZE - 1,
+            0 => 1,
+            1 => 0,
+            _ => panic!("test direction must use -1, 0, or 1"),
+        }
     }
 }
