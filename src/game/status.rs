@@ -4,6 +4,11 @@ use super::Player;
 ///
 /// `GameState` は盤面・手番・手数を持つ「状態」そのものを表す。
 /// `GameStatus` は、その状態がゲームとしてどう評価されるかを表す。
+///
+/// 英語では `state` は「内部状態・局面」、`status` は「現在の評価・進行状況」
+/// という使い分けでよく使われる。
+/// このリポジトリでも、`GameState` はゲームを進めるためのデータ本体、
+/// `GameStatus` はそのデータを見て得られる結果ラベルとして使う。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameStatus {
     /// まだ勝敗が決まっておらず、次の手を打てる状態。
