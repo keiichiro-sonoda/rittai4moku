@@ -46,10 +46,10 @@ fn rotate_z_axis(board: &Board, rotation: usize) -> Board {
     result
 }
 
-/// 盤面をx軸に関して反転する。
+/// 盤面のx座標を反転する。
 ///
 /// x座標だけを `BOARD_SIZE - 1 - x` に変換し、y座標とz座標はそのまま保つ。
-fn flip_x_axis(board: &Board) -> Board {
+fn flip_x_coordinate(board: &Board) -> Board {
     let mut result = [[[Cell::Empty; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
 
     for (z, layer) in board.iter().enumerate() {
@@ -246,16 +246,16 @@ impl GameState {
     /// 以下の8通りの変換を適用したキーのうち、最小のものを返す:
     ///
     /// - z軸中心の回転: 0°, 90°, 180°, 270° の4通り
-    /// - x軸反転: あり・なし の2通り
+    /// - x座標反転: あり・なし の2通り
     ///
     /// これにより、回転・鏡映で同じ局面を表す8通りの盤面が、必ず同じキーに収束する。
     pub fn normalized_key(&self) -> u128 {
         let mut min_key = u128::MAX;
 
-        // 元の盤面とx軸反転盤面の両方について、4方向の回転を試す
+        // 元の盤面とx座標反転盤面の両方について、4方向の回転を試す
         for flip_x in [false, true] {
             let base_board = if flip_x {
-                flip_x_axis(&self.board)
+                flip_x_coordinate(&self.board)
             } else {
                 self.board
             };
@@ -865,19 +865,20 @@ mod tests {
         // (1, 0) に1個置いた盤面
         let state = GameState::initial().play(Column::new(1, 0)).unwrap().state;
 
-        // z軸中心に90度回転すると (0, 1) に見える盤面になる
-        let rotated_state = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+        // この実装の90度回転は (x, y) -> (3 - y, x) なので、
+        // (1, 0) は (3, 1) に見える盤面になる。
+        let rotated_state = GameState::initial().play(Column::new(3, 1)).unwrap().state;
 
         assert_eq!(state.normalized_key(), rotated_state.normalized_key());
     }
 
-    /// x軸反転した盤面は、同じ正規化キーになる。
+    /// x座標反転した盤面は、同じ正規化キーになる。
     #[test]
     fn normalized_key_same_for_x_flip() {
         // (0, 1) に1個置いた盤面
         let state = GameState::initial().play(Column::new(0, 1)).unwrap().state;
 
-        // x軸反転すると (3, 1) に見える盤面になる
+        // x座標反転すると (3, 1) に見える盤面になる
         let flipped_state = GameState::initial().play(Column::new(3, 1)).unwrap().state;
 
         assert_eq!(state.normalized_key(), flipped_state.normalized_key());
@@ -890,26 +891,26 @@ mod tests {
         // (1, 0) に1個だけ置く
         let state = GameState::initial().play(Column::new(1, 0)).unwrap().state;
 
-        // z軸中心に90度回転 → (0, 1)
-        let rot90 = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+        // z軸中心に90度回転 → (3, 1)
+        let rot90 = GameState::initial().play(Column::new(3, 1)).unwrap().state;
 
         // z軸中心に180度回転 → (2, 3)
         let rot180 = GameState::initial().play(Column::new(2, 3)).unwrap().state;
 
-        // z軸中心に270度回転 → (3, 2)
-        let rot270 = GameState::initial().play(Column::new(3, 2)).unwrap().state;
+        // z軸中心に270度回転 → (0, 2)
+        let rot270 = GameState::initial().play(Column::new(0, 2)).unwrap().state;
 
-        // x軸反転 → (2, 0)
+        // x座標反転 → (2, 0)
         let flipx = GameState::initial().play(Column::new(2, 0)).unwrap().state;
 
-        // x軸反転後90度回転 → (0, 2)
-        let flipx_rot90 = GameState::initial().play(Column::new(0, 2)).unwrap().state;
+        // x座標反転後90度回転 → (3, 2)
+        let flipx_rot90 = GameState::initial().play(Column::new(3, 2)).unwrap().state;
 
-        // x軸反転後180度回転 → (1, 3)
+        // x座標反転後180度回転 → (1, 3)
         let flipx_rot180 = GameState::initial().play(Column::new(1, 3)).unwrap().state;
 
-        // x軸反転後270度回転 → (3, 1)
-        let flipx_rot270 = GameState::initial().play(Column::new(3, 1)).unwrap().state;
+        // x座標反転後270度回転 → (0, 1)
+        let flipx_rot270 = GameState::initial().play(Column::new(0, 1)).unwrap().state;
 
         let base = state.normalized_key();
         assert_eq!(rot90.normalized_key(), base);

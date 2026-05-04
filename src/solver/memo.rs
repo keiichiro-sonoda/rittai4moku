@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(memo.len(), 1); // エントリは1つだけ
     }
 
-    /// x軸反転した盤面は同じ正規化キーになるため、同じメモエントリを共有する。
+    /// x座標反転した盤面は同じ正規化キーになるため、同じメモエントリを共有する。
     #[test]
     fn flipped_states_share_same_memo_entry() {
         let state = GameState::initial().play(Column::new(0, 1)).unwrap().state;
@@ -162,7 +162,7 @@ mod tests {
 
         memo.remember(&state, Outcome::Loss);
 
-        // x軸反転した盤面でも同じメモが引ける
+        // x座標反転した盤面でも同じメモが引ける
         assert_eq!(memo.lookup(&flipped), Some(Outcome::Loss));
         assert_eq!(memo.len(), 1); // エントリは1つだけ
     }
