@@ -27,15 +27,19 @@ cargo run             # 現状は初期状態を表示するだけ
 src/
 ├── main.rs            実験用エントリ（現状は初期状態を表示）
 ├── lib.rs             ライブラリ入口
-└── game/
-    ├── mod.rs         集約と再エクスポート、INITIAL_STATE
-    ├── cell.rs        1マスの状態 Cell と 3進数桁の変換
-    ├── player.rs      手番のプレイヤー Player
-    ├── coordinate.rs  柱 Column と 3次元座標 Position
-    ├── line.rs        方向 Direction と代表13方向 ALL_DIRECTIONS
-    ├── constants.rs   盤面サイズなどの定数
-    ├── state.rs       GameState、play、勝敗判定、盤面キー
-    └── status.rs      ゲームの進行ラベル GameStatus
+├── game/
+│   ├── mod.rs         集約と再エクスポート、INITIAL_STATE
+│   ├── cell.rs        1マスの状態 Cell と 3進数桁の変換
+│   ├── player.rs      手番のプレイヤー Player
+│   ├── coordinate.rs  柱 Column と 3次元座標 Position
+│   ├── line.rs        方向 Direction と代表13方向 ALL_DIRECTIONS
+│   ├── constants.rs   盤面サイズなどの定数
+│   ├── state.rs       GameState、play、勝敗判定、盤面キー
+│   └── status.rs      ゲームの進行ラベル GameStatus
+└── solver/
+    ├── mod.rs         探索用モジュールの集約
+    ├── outcome.rs     手番側から見た探索結果 Outcome
+    └── memo.rs        盤面キーから Outcome を取り出す MemoTable
 
 docs/
 ├── adr/               設計判断の記録（1 判断 1 ファイル）
@@ -51,6 +55,7 @@ docs/
 - **プレイヤーが選ぶのは柱、実際の置き場所は重力で決まる**。前者を `Column`、後者を `Position` として型で区別する。
 - **勝敗判定は最後に置かれた位置から代表13方向だけ**を調べる（[ADR-0004](docs/adr/0004-win-detection-from-last-position.md)）。
 - **盤面は 3進数キー（`u128`）に往復できる**（[ADR-0003](docs/adr/0003-base3-board-key.md)）。探索結果を `HashMap` などに保存する将来計画の足場。
+- **メモ化は `MemoTable` から始める**（[ADR-0005](docs/adr/0005-memoization-table.md)）。まずはメモリ上で、盤面キーから探索結果を保存・取得する。
 - **盤面表現は速度より読みやすさを優先する**（[ADR-0001](docs/adr/0001-board-representation.md)、[ADR-0002](docs/adr/0002-redundant-turn-and-moves-played.md)）。
 
 ## 学習リポジトリとしてのスタンス

@@ -96,6 +96,22 @@ classDiagram
         Draw
     }
 
+    class Outcome {
+        <<enum>>
+        Win
+        Loss
+        Draw
+    }
+
+    class MemoTable {
+        +new() MemoTable
+        +len() usize
+        +is_empty() bool
+        +remember(GameState, Outcome) Option~Outcome~
+        +lookup(GameState) Option~Outcome~
+        +contains(GameState) bool
+    }
+
     GameState --> Board
     GameState --> Player
     GameState ..> Column
@@ -111,6 +127,8 @@ classDiagram
     PlayResult --> GameState
     PlayResult --> Position
     Direction ..> Position
+    MemoTable ..> GameState
+    MemoTable --> Outcome
 ```
 
 ## モジュールの関係
@@ -120,6 +138,7 @@ flowchart TD
     main["src/main.rs\n実行入口"]
     lib["src/lib.rs\nライブラリ入口"]
     game["src/game/mod.rs\ngame の公開窓口"]
+    solver["src/solver/mod.rs\nsolver の公開窓口"]
 
     constants["constants.rs\n盤面サイズなど"]
     cell["cell.rs\nCell"]
@@ -128,9 +147,12 @@ flowchart TD
     line["line.rs\nDirection"]
     status["status.rs\nGameStatus"]
     state["state.rs\nGameState / PlayResult / PlayError"]
+    outcome["outcome.rs\nOutcome"]
+    memo["memo.rs\nMemoTable"]
 
     main --> lib
     lib --> game
+    lib --> solver
     game --> constants
     game --> cell
     game --> player
@@ -149,6 +171,11 @@ flowchart TD
     state --> coordinate
     state --> line
     state --> status
+
+    solver --> outcome
+    solver --> memo
+    memo --> game
+    memo --> outcome
 ```
 
 ## 着手処理の流れ
@@ -285,3 +312,28 @@ flowchart TD
 ```
 
 復元処理は、保存したキーを再び `GameState` として扱うための準備です。ただし、現在の `from_board_key_base3` は重力に反していないか、黒白の個数が合法かまでは検証しません。初期状態から `play` で作った局面を保存し、そのキーを読み戻す用途を想定しています。
+
+## メモ化の最小単位
+
+```mermaid
+flowchart TD
+    state["GameState"]
+    key["board_key_base3()"]
+    table["MemoTable\nHashMap<u128, Outcome>"]
+    hit{"保存済み？"}
+    lookup["lookup(state)\nSome(Outcome)"]
+    miss["lookup(state)\nNone"]
+    calc["将来: この局面を探索する"]
+    remember["remember(state, outcome)"]
+
+    state --> key
+    key --> table
+    table --> hit
+    hit -->|yes| lookup
+    hit -->|no| miss
+    miss --> calc
+    calc --> remember
+    remember --> table
+```
+
+メモ化は「同じ局面をもう一度調べない」ための仕組みです。現在は探索本体をまだ実装せず、`MemoTable` で盤面キーと `Outcome` を保存・取得するところだけを確認します。

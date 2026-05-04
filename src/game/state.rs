@@ -207,9 +207,9 @@ impl GameState {
         let mut board = [[[Cell::Empty; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
         let mut moves_played = 0;
 
-        for z in 0..BOARD_SIZE {
-            for y in 0..BOARD_SIZE {
-                for x in 0..BOARD_SIZE {
+        for layer in board.iter_mut() {
+            for row in layer.iter_mut() {
+                for cell_slot in row.iter_mut() {
                     let digit = key % 3;
                     let cell = Cell::from_base3_digit(digit)?;
 
@@ -217,7 +217,7 @@ impl GameState {
                         moves_played += 1;
                     }
 
-                    board[z][y][x] = cell;
+                    *cell_slot = cell;
                     key /= 3;
                 }
             }
