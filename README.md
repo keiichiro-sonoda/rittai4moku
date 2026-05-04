@@ -39,7 +39,8 @@ src/
 └── solver/
     ├── mod.rs         探索用モジュールの集約
     ├── outcome.rs     手番側から見た探索結果 Outcome と終局状態からの変換
-    └── memo.rs        盤面キーから Outcome を取り出す MemoTable
+    ├── memo.rs        盤面キーから Outcome を取り出す MemoTable
+    └── search.rs      再帰探索の最小実装
 
 docs/
 ├── adr/               設計判断の記録（1 判断 1 ファイル）
@@ -58,6 +59,7 @@ docs/
 - **メモ化は `MemoTable` から始める**（[ADR-0005](docs/adr/0005-memoization-table.md)）。まずはメモリ上で、盤面キーから探索結果を保存・取得する。
 - **`GameStatus` と `Outcome` を分ける**。進行中・勝者・引き分けというゲーム状態ラベルを、探索用には「手番側から見た勝ち・負け・引き分け」に変換し、子局面の結果は `Outcome::flip()` で親局面の視点に戻す。
 - **最初の `Outcome` は手数を持たない**。完全解析の分類を先に完成させ、対戦AIで早勝ち・遅負けを扱う段階で `plies` 付き表現を検討する。
+- **再帰探索は最小実装から始める**。`solve_after_move` は最後の着手位置で終局判定し、進行中なら合法手を再帰的に試す。初期状態からの全探索はまだ現実的な実行対象にしない。
 - **盤面表現は速度より読みやすさを優先する**（[ADR-0001](docs/adr/0001-board-representation.md)、[ADR-0002](docs/adr/0002-redundant-turn-and-moves-played.md)）。
 
 ## 学習リポジトリとしてのスタンス

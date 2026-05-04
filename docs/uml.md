@@ -114,6 +114,12 @@ classDiagram
         +contains(GameState) bool
     }
 
+    class Search {
+        <<module>>
+        +solve(GameState, MemoTable) Outcome
+        +solve_after_move(GameState, Position, MemoTable) Outcome
+    }
+
     GameState --> Board
     GameState --> Player
     GameState ..> Column
@@ -133,6 +139,10 @@ classDiagram
     MemoTable --> Outcome
     Outcome ..> GameStatus
     Outcome ..> Player
+    Search ..> GameState
+    Search ..> Position
+    Search ..> MemoTable
+    Search ..> Outcome
 ```
 
 ## モジュールの関係
@@ -153,6 +163,7 @@ flowchart TD
     state["state.rs\nGameState / PlayResult / PlayError"]
     outcome["outcome.rs\nOutcome"]
     memo["memo.rs\nMemoTable"]
+    search["search.rs\nsolve / solve_after_move"]
 
     main --> lib
     lib --> game
@@ -178,8 +189,12 @@ flowchart TD
 
     solver --> outcome
     solver --> memo
+    solver --> search
     memo --> game
     memo --> outcome
+    search --> game
+    search --> memo
+    search --> outcome
 ```
 
 ## 着手処理の流れ
@@ -392,3 +407,37 @@ flowchart LR
 ```
 
 自分が1手打った後の局面は相手番です。その子局面を解いて返ってくる `Outcome` は相手から見た結果なので、親局面で読むときは `flip()` で視点を戻します。
+
+## 再帰探索の最小実装
+
+```mermaid
+flowchart TD
+    state["GameState"]
+    memo["MemoTable"]
+    memoHit{"メモ済み？"}
+    returnMemo["保存済み Outcome を返す"]
+    moves["legal_moves()"]
+    play["play(column)"]
+    child["solve_after_move(child_state, placed_at, memo)"]
+    flip["child_outcome.flip()"]
+    win{"Win が見つかった？"}
+    draw{"Draw 候補あり？"}
+    rememberWin["Win をメモして返す"]
+    rememberDraw["Draw をメモして返す"]
+    rememberLoss["Loss をメモして返す"]
+
+    state --> memoHit
+    memo --> memoHit
+    memoHit -->|yes| returnMemo
+    memoHit -->|no| moves
+    moves --> play
+    play --> child
+    child --> flip
+    flip --> win
+    win -->|yes| rememberWin
+    win -->|no| draw
+    draw -->|yes| rememberDraw
+    draw -->|no| rememberLoss
+```
+
+`solve_after_move` は、最後に置かれた `Position` を使って勝ち・引き分け・進行中を先に判定します。進行中なら `solve` に渡し、合法手を再帰的に試します。現在の実装は学習用の最小形であり、初期状態から完全に解くにはまだ性能面の工夫が必要です。

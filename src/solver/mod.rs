@@ -9,6 +9,8 @@
 
 mod memo;
 mod outcome;
+mod search;
 
 pub use memo::MemoTable;
 pub use outcome::Outcome;
+pub use search::{solve, solve_after_move};
