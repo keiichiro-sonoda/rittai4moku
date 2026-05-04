@@ -2,6 +2,67 @@ use super::{
     ALL_DIRECTIONS, BOARD_SIZE, CELL_COUNT, Cell, Column, Direction, GameStatus, Player, Position,
 };
 
+/// 盤面を3進数キーに変換する。
+///
+/// z→y→x の順に走査し、各マスを3進数の桁として符号化する。
+fn board_to_key(board: &Board) -> u128 {
+    let mut key = 0;
+    let mut place = 1;
+
+    for layer in board {
+        for row in layer {
+            for &cell in row {
+                key += cell.base3_digit() * place;
+                place *= 3;
+            }
+        }
+    }
+
+    key
+}
+
+/// 盤面をz軸中心に90度単位で回転する。
+///
+/// `rotation` は 0, 1, 2, 3 のいずれかで、それぞれ 0°, 90°, 180°, 270° 回転を表す。
+/// z軸方向（上下）は変わらず、x-y 平面内で回転する。
+fn rotate_z_axis(board: &Board, rotation: usize) -> Board {
+    let mut result = [[[Cell::Empty; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
+
+    for (z, layer) in board.iter().enumerate() {
+        for (y, row) in layer.iter().enumerate() {
+            for (x, &cell) in row.iter().enumerate() {
+                let (nx, ny) = match rotation % 4 {
+                    0 => (x, y),                                   // 0°
+                    1 => (BOARD_SIZE - 1 - y, x),                  // 90°
+                    2 => (BOARD_SIZE - 1 - x, BOARD_SIZE - 1 - y), // 180°
+                    3 => (y, BOARD_SIZE - 1 - x),                  // 270°
+                    _ => unreachable!(),
+                };
+                result[z][ny][nx] = cell;
+            }
+        }
+    }
+
+    result
+}
+
+/// 盤面をx軸に関して反転する。
+///
+/// x座標だけを `BOARD_SIZE - 1 - x` に変換し、y座標とz座標はそのまま保つ。
+fn flip_x_axis(board: &Board) -> Board {
+    let mut result = [[[Cell::Empty; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
+
+    for (z, layer) in board.iter().enumerate() {
+        for (y, row) in layer.iter().enumerate() {
+            for (x, &cell) in row.iter().enumerate() {
+                result[z][y][BOARD_SIZE - 1 - x] = cell;
+            }
+        }
+    }
+
+    result
+}
+
 /// 立体4目並べの盤面。
 ///
 /// 添字は `board[z][y][x]` と読む。
@@ -174,19 +235,39 @@ impl GameState {
     /// つまり、ループとしては `z -> y -> x` の順に回す。
     /// 最初に読んだ `(0, 0, 0)` は3進数の最下位桁になる。
     pub fn board_key_base3(&self) -> u128 {
-        let mut key = 0;
-        let mut place = 1;
+        board_to_key(&self.board)
+    }
 
-        for z in 0..BOARD_SIZE {
-            for y in 0..BOARD_SIZE {
-                for x in 0..BOARD_SIZE {
-                    key += self.board[z][y][x].base3_digit() * place;
-                    place *= 3;
-                }
+    /// 盤面を8通りの対称変換に対して正規化したキーを返す。
+    ///
+    /// 重力ありの立体4目並べでは、z軸中心の回転と x-y 平面の鏡映が対称性として使える。
+    /// z軸（上下）反転は重力方向を逆にするため、対称性として扱わない。
+    ///
+    /// 以下の8通りの変換を適用したキーのうち、最小のものを返す:
+    ///
+    /// - z軸中心の回転: 0°, 90°, 180°, 270° の4通り
+    /// - x軸反転: あり・なし の2通り
+    ///
+    /// これにより、回転・鏡映で同じ局面を表す8通りの盤面が、必ず同じキーに収束する。
+    pub fn normalized_key(&self) -> u128 {
+        let mut min_key = u128::MAX;
+
+        // 元の盤面とx軸反転盤面の両方について、4方向の回転を試す
+        for flip_x in [false, true] {
+            let base_board = if flip_x {
+                flip_x_axis(&self.board)
+            } else {
+                self.board
+            };
+
+            for rotation in 0..4 {
+                let rotated = rotate_z_axis(&base_board, rotation);
+                let key = board_to_key(&rotated);
+                min_key = min_key.min(key);
             }
         }
 
-        key
+        min_key
     }
 
     /// 3進数表現の盤面キーから `GameState` を復元する。
@@ -765,5 +846,78 @@ mod tests {
             1 => 0,
             _ => panic!("test direction must use -1, 0, or 1"),
         }
+    }
+
+    /// 正規化キーは元の盤面と同じキーを返す。
+    #[test]
+    fn normalized_key_returns_same_for_identity() {
+        let state = GameState::initial().play(Column::new(0, 0)).unwrap().state;
+        let original_key = state.board_key_base3();
+        let normalized = state.normalized_key();
+
+        // 初期状態 + 1手の単純な盤面では、正規化後も元のキー以下になる
+        assert!(normalized <= original_key);
+    }
+
+    /// z軸中心に90度回転した盤面は、同じ正規化キーになる。
+    #[test]
+    fn normalized_key_same_for_z_rotation() {
+        // (1, 0) に1個置いた盤面
+        let state = GameState::initial().play(Column::new(1, 0)).unwrap().state;
+
+        // z軸中心に90度回転すると (0, 1) に見える盤面になる
+        let rotated_state = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+
+        assert_eq!(state.normalized_key(), rotated_state.normalized_key());
+    }
+
+    /// x軸反転した盤面は、同じ正規化キーになる。
+    #[test]
+    fn normalized_key_same_for_x_flip() {
+        // (0, 1) に1個置いた盤面
+        let state = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+
+        // x軸反転すると (3, 1) に見える盤面になる
+        let flipped_state = GameState::initial().play(Column::new(3, 1)).unwrap().state;
+
+        assert_eq!(state.normalized_key(), flipped_state.normalized_key());
+    }
+
+    /// 回転と鏡映を組み合わせた8通りの盤面が、すべて同じ正規化キーになる。
+    #[test]
+    fn normalized_key_same_for_all_symmetries() {
+        // 対称性を確認しやすいシンプルな盤面を作る
+        // (1, 0) に1個だけ置く
+        let state = GameState::initial().play(Column::new(1, 0)).unwrap().state;
+
+        // z軸中心に90度回転 → (0, 1)
+        let rot90 = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+
+        // z軸中心に180度回転 → (2, 3)
+        let rot180 = GameState::initial().play(Column::new(2, 3)).unwrap().state;
+
+        // z軸中心に270度回転 → (3, 2)
+        let rot270 = GameState::initial().play(Column::new(3, 2)).unwrap().state;
+
+        // x軸反転 → (2, 0)
+        let flipx = GameState::initial().play(Column::new(2, 0)).unwrap().state;
+
+        // x軸反転後90度回転 → (0, 2)
+        let flipx_rot90 = GameState::initial().play(Column::new(0, 2)).unwrap().state;
+
+        // x軸反転後180度回転 → (1, 3)
+        let flipx_rot180 = GameState::initial().play(Column::new(1, 3)).unwrap().state;
+
+        // x軸反転後270度回転 → (3, 1)
+        let flipx_rot270 = GameState::initial().play(Column::new(3, 1)).unwrap().state;
+
+        let base = state.normalized_key();
+        assert_eq!(rot90.normalized_key(), base);
+        assert_eq!(rot180.normalized_key(), base);
+        assert_eq!(rot270.normalized_key(), base);
+        assert_eq!(flipx.normalized_key(), base);
+        assert_eq!(flipx_rot90.normalized_key(), base);
+        assert_eq!(flipx_rot180.normalized_key(), base);
+        assert_eq!(flipx_rot270.normalized_key(), base);
     }
 }

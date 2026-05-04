@@ -9,8 +9,11 @@ use super::Outcome;
 /// メモ化とは、一度計算した結果を保存しておき、
 /// 同じ入力が再び出てきたときに再計算せず取り出す方法。
 ///
-/// この型では、`GameState::board_key_base3()` が返す盤面キーを `HashMap` のキーにする。
+/// この型では、`GameState::normalized_key()` が返す正規化済み盤面キーを `HashMap` のキーにする。
 /// 値には、その局面を探索した結果である `Outcome` を保存する。
+///
+/// 正規化キーを使うことで、回転・鏡映で同じ局面を表す8通りの盤面が、
+/// すべて同じメモエントリに収束する。
 ///
 /// まだ完全探索は実装しない。
 /// まずは「盤面キーで保存する」「同じ盤面キーで取り出す」という
@@ -44,13 +47,14 @@ impl MemoTable {
 
     /// 指定した局面の探索結果を保存する。
     ///
-    /// `state.board_key_base3()` をキーとして使うため、呼び出し側は
+    /// `state.normalized_key()` をキーとして使うため、呼び出し側は
     /// 盤面キーの作り方を毎回意識しなくてよい。
+    /// 回転・鏡映で同じ局面は同じキーになり、同じメモエントリに収束する。
     ///
     /// 同じキーがすでに保存されていた場合は、古い `Outcome` を返す。
     /// 初めて保存する局面なら `None` を返す。
     pub fn remember(&mut self, state: &GameState, outcome: Outcome) -> Option<Outcome> {
-        self.entries.insert(state.board_key_base3(), outcome)
+        self.entries.insert(state.normalized_key(), outcome)
     }
 
     /// 指定した局面の探索結果がメモにあれば返す。
@@ -58,13 +62,19 @@ impl MemoTable {
     /// まだ保存されていない局面なら `None` を返す。
     /// 将来の探索では、`None` のときだけ実際に合法手を調べ、
     /// 結果が分かったら `remember` で保存する流れになる。
+    ///
+    /// 正規化キーを使うため、元の盤面を回転・鏡映した局面でも、
+    /// 同じメモエントリを取り出せる。
     pub fn lookup(&self, state: &GameState) -> Option<Outcome> {
-        self.entries.get(&state.board_key_base3()).copied()
+        self.entries.get(&state.normalized_key()).copied()
     }
 
     /// 指定した局面がメモ済みかどうかを返す。
+    ///
+    /// 正規化キーを使うため、元の盤面を回転・鏡映した局面も、
+    /// すでに保存済みとして判定される。
     pub fn contains(&self, state: &GameState) -> bool {
-        self.entries.contains_key(&state.board_key_base3())
+        self.entries.contains_key(&state.normalized_key())
     }
 }
 
@@ -127,5 +137,33 @@ mod tests {
 
         assert_eq!(memo.len(), 1);
         assert_eq!(memo.lookup(&state), Some(Outcome::Loss));
+    }
+
+    /// 回転した盤面は同じ正規化キーになるため、同じメモエントリを共有する。
+    #[test]
+    fn rotated_states_share_same_memo_entry() {
+        let state = GameState::initial().play(Column::new(1, 0)).unwrap().state;
+        let rotated = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+        let mut memo = MemoTable::new();
+
+        memo.remember(&state, Outcome::Win);
+
+        // 回転した盤面でも同じメモが引ける
+        assert_eq!(memo.lookup(&rotated), Some(Outcome::Win));
+        assert_eq!(memo.len(), 1); // エントリは1つだけ
+    }
+
+    /// x軸反転した盤面は同じ正規化キーになるため、同じメモエントリを共有する。
+    #[test]
+    fn flipped_states_share_same_memo_entry() {
+        let state = GameState::initial().play(Column::new(0, 1)).unwrap().state;
+        let flipped = GameState::initial().play(Column::new(3, 1)).unwrap().state;
+        let mut memo = MemoTable::new();
+
+        memo.remember(&state, Outcome::Loss);
+
+        // x軸反転した盤面でも同じメモが引ける
+        assert_eq!(memo.lookup(&flipped), Some(Outcome::Loss));
+        assert_eq!(memo.len(), 1); // エントリは1つだけ
     }
 }
