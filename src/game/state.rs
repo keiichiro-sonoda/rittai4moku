@@ -1,4 +1,6 @@
-use super::{ALL_DIRECTIONS, BOARD_SIZE, CELL_COUNT, Cell, Column, Direction, Player, Position};
+use super::{
+    ALL_DIRECTIONS, BOARD_SIZE, CELL_COUNT, Cell, Column, Direction, GameStatus, Player, Position,
+};
 
 /// 立体4目並べの盤面。
 ///
@@ -207,6 +209,33 @@ impl GameState {
             .any(|&direction| self.count_line_cells(start, direction, target) >= BOARD_SIZE)
     }
 
+    /// 最後に置かれた位置をもとに、ゲーム全体の進行状態を返す。
+    ///
+    /// 勝敗は最後に置かれたコマによってだけ新しく発生する。
+    /// そのため、毎回すべての盤面を調べるのではなく、
+    /// `placed_at` を通るラインで勝ちがあるかを先に見る。
+    ///
+    /// 判定の順番:
+    ///
+    /// 1. 最後のコマで勝ちが成立していれば `GameStatus::Win`
+    /// 2. 勝ちがなく、盤面が満杯なら `GameStatus::Draw`
+    /// 3. それ以外なら `GameStatus::InProgress`
+    pub fn status_after_move(&self, placed_at: Position) -> GameStatus {
+        if self.is_winning_position(placed_at) {
+            let winner = self
+                .cell_at(placed_at)
+                .player()
+                .expect("winning position must contain a player's cell");
+            return GameStatus::Win(winner);
+        }
+
+        if self.is_full() {
+            GameStatus::Draw
+        } else {
+            GameStatus::InProgress
+        }
+    }
+
     /// 指定した柱に現在の手番のコマを落とし、着手結果を返す。
     ///
     /// この関数は元の `GameState` を直接書き換えない。
@@ -241,7 +270,7 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::{COLUMN_COUNT, Direction};
+    use crate::game::{COLUMN_COUNT, Direction, GameStatus};
 
     /// 初期状態が「空の盤面・黒番・0手目」になっていることを確認する。
     ///
@@ -255,6 +284,9 @@ mod tests {
         assert_eq!(state.turn, Player::Black);
         assert_eq!(state.turn.cell(), Cell::Black);
         assert_eq!(state.turn.next(), Player::White);
+        assert_eq!(Cell::Black.player(), Some(Player::Black));
+        assert_eq!(Cell::White.player(), Some(Player::White));
+        assert_eq!(Cell::Empty.player(), None);
         assert_eq!(state.moves_played, 0);
         assert!(!state.is_full());
         assert_eq!(state.legal_moves().len(), COLUMN_COUNT);
@@ -430,5 +462,51 @@ mod tests {
         let state = GameState::initial();
 
         assert!(!state.is_winning_position(Position::new(0, 0, 0)));
+    }
+
+    /// 最後の手で4つ並んだ場合、ゲーム状態はそのプレイヤーの勝ちになる。
+    #[test]
+    fn status_after_move_returns_win_for_winning_move() {
+        let mut state = GameState::initial();
+        state = state.play(Column::new(0, 0)).unwrap().state;
+        state = state.play(Column::new(0, 1)).unwrap().state;
+        state = state.play(Column::new(1, 0)).unwrap().state;
+        state = state.play(Column::new(1, 1)).unwrap().state;
+        state = state.play(Column::new(2, 0)).unwrap().state;
+        state = state.play(Column::new(2, 1)).unwrap().state;
+        let result = state.play(Column::new(3, 0)).unwrap();
+
+        assert_eq!(
+            result.state.status_after_move(result.placed_at),
+            GameStatus::Win(Player::Black)
+        );
+    }
+
+    /// 勝ちがなく、まだ空きがある場合は進行中になる。
+    #[test]
+    fn status_after_move_returns_in_progress_without_win_or_full_board() {
+        let result = GameState::initial().play(Column::new(0, 0)).unwrap();
+
+        assert_eq!(
+            result.state.status_after_move(result.placed_at),
+            GameStatus::InProgress
+        );
+    }
+
+    /// 最後に置いた位置で勝ちがなく、盤面が満杯の場合は引き分けになる。
+    #[test]
+    fn status_after_move_returns_draw_for_full_board_when_last_move_does_not_win() {
+        let mut board = [[[Cell::White; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
+        let placed_at = Position::new(0, 0, 0);
+        board[placed_at.z][placed_at.y][placed_at.x] = Cell::Black;
+
+        let state = GameState {
+            board,
+            turn: Player::Black,
+            moves_played: CELL_COUNT as u8,
+        };
+
+        assert!(!state.is_winning_position(placed_at));
+        assert_eq!(state.status_after_move(placed_at), GameStatus::Draw);
     }
 }

@@ -1,3 +1,5 @@
+use super::Player;
+
 /// 盤面の1マスの状態。
 ///
 /// `Empty` はまだコマが置かれていないマス、
@@ -14,4 +16,19 @@ pub enum Cell {
 
     /// 黒のコマが置かれているマス。
     Black,
+}
+
+impl Cell {
+    /// このマスに置かれているコマのプレイヤーを返す。
+    ///
+    /// `Cell::White` なら `Some(Player::White)`、
+    /// `Cell::Black` なら `Some(Player::Black)` になる。
+    /// `Cell::Empty` は誰のコマでもないので `None` を返す。
+    pub const fn player(self) -> Option<Player> {
+        match self {
+            Self::Empty => None,
+            Self::White => Some(Player::White),
+            Self::Black => Some(Player::Black),
+        }
+    }
 }

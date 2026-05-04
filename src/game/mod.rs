@@ -9,6 +9,7 @@ mod coordinate;
 mod line;
 mod player;
 mod state;
+mod status;
 
 pub use cell::Cell;
 pub use constants::{BOARD_SIZE, CELL_COUNT, COLUMN_COUNT};
@@ -16,6 +17,7 @@ pub use coordinate::{Column, Position};
 pub use line::{ALL_DIRECTIONS, Direction};
 pub use player::Player;
 pub use state::{Board, GameState, PlayError, PlayResult};
+pub use status::GameStatus;
 
 /// ゲーム開始時の状態を表す定数。
 ///

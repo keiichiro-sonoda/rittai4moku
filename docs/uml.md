@@ -26,6 +26,7 @@ classDiagram
         +count_line_cells(Position, Direction, Cell) usize
         +is_winning_line(Position, Direction) bool
         +is_winning_position(Position) bool
+        +status_after_move(Position) GameStatus
         +play(Column) Result~PlayResult, PlayError~
     }
 
@@ -39,6 +40,7 @@ classDiagram
         Empty
         White
         Black
+        +player() Option~Player~
     }
 
     class Player {
@@ -83,6 +85,13 @@ classDiagram
         ColumnFull
     }
 
+    class GameStatus {
+        <<enum>>
+        InProgress
+        Win(Player)
+        Draw
+    }
+
     GameState --> Board
     GameState --> Player
     GameState ..> Column
@@ -91,8 +100,10 @@ classDiagram
     GameState ..> Cell
     GameState ..> PlayResult
     GameState ..> PlayError
+    GameState ..> GameStatus
     Board --> Cell
     Player ..> Cell
+    Cell ..> Player
     PlayResult --> GameState
     PlayResult --> Position
     Direction ..> Position
@@ -111,6 +122,7 @@ flowchart TD
     player["player.rs\nPlayer"]
     coordinate["coordinate.rs\nColumn / Position"]
     line["line.rs\nDirection"]
+    status["status.rs\nGameStatus"]
     state["state.rs\nGameState / PlayResult / PlayError"]
 
     main --> lib
@@ -120,6 +132,7 @@ flowchart TD
     game --> player
     game --> coordinate
     game --> line
+    game --> status
     game --> state
 
     player --> cell
@@ -131,6 +144,7 @@ flowchart TD
     state --> player
     state --> coordinate
     state --> line
+    state --> status
 ```
 
 ## 着手処理の流れ
@@ -189,3 +203,25 @@ flowchart TD
 この最後の図の流れは、`GameState::is_winning_position` として実装済みです。次はこの判定を使って、ゲーム全体が進行中・勝ち・引き分けのどれかを表す型へ進みます。
 
 位置ごとに「この方向では4つ並びようがない」と分かる場合、その方向を事前に省く最適化も考えられます。ただし、今は勝敗判定の正しさと理解しやすさを優先し、その最適化は後回しにします。
+
+## ゲーム状態の判定
+
+```mermaid
+flowchart TD
+    placed["最後に置かれた Position"]
+    win{"is_winning_position(placed) ?"}
+    winner["cell_at(placed).player()"]
+    full{"is_full() ?"}
+    statusWin["GameStatus::Win(Player)"]
+    statusDraw["GameStatus::Draw"]
+    statusProgress["GameStatus::InProgress"]
+
+    placed --> win
+    win -->|yes| winner
+    winner --> statusWin
+    win -->|no| full
+    full -->|yes| statusDraw
+    full -->|no| statusProgress
+```
+
+この図の流れは、`GameState::status_after_move` として実装済みです。
