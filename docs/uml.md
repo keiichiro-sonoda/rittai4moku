@@ -19,6 +19,7 @@ classDiagram
         +initial() GameState
         +is_full() bool
         +board_key_base3() u128
+        +from_board_key_base3(u128) Option~GameState~
         +next_empty_z(Column) Option~usize~
         +is_column_full(Column) bool
         +legal_moves() Vec~Column~
@@ -42,6 +43,7 @@ classDiagram
         White
         Black
         +base3_digit() u128
+        +from_base3_digit(u128) Option~Cell~
         +player() Option~Player~
     }
 
@@ -252,3 +254,34 @@ flowchart TD
 ```
 
 最初のマス `(0, 0, 0)` は3進数の最下位桁として扱います。走査順は `(0,0,0)`, `(1,0,0)`, ..., `(3,3,0)`, `(0,0,1)`, ... です。
+
+## 盤面キーからの復元
+
+```mermaid
+flowchart TD
+    start["from_board_key_base3(key)"]
+    digit["digit = key % 3"]
+    cell["Cell::from_base3_digit(digit)"]
+    invalidDigit{"0, 1, 2 以外？"}
+    set["board[z][y][x] = cell"]
+    count["空でなければ moves_played += 1"]
+    shift["key /= 3"]
+    extra{"64マスを読んだ後も key が残る？"}
+    turn["moves_played の偶奇から turn を復元"]
+    done["Some(GameState)"]
+    none["None"]
+
+    start --> digit
+    digit --> cell
+    cell --> invalidDigit
+    invalidDigit -->|yes| none
+    invalidDigit -->|no| set
+    set --> count
+    count --> shift
+    shift --> extra
+    extra -->|yes| none
+    extra -->|no| turn
+    turn --> done
+```
+
+復元処理は、保存したキーを再び `GameState` として扱うための準備です。ただし、現在の `from_board_key_base3` は重力に反していないか、黒白の個数が合法かまでは検証しません。初期状態から `play` で作った局面を保存し、そのキーを読み戻す用途を想定しています。

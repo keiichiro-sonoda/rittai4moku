@@ -189,6 +189,57 @@ impl GameState {
         key
     }
 
+    /// 3進数表現の盤面キーから `GameState` を復元する。
+    ///
+    /// `board_key_base3` と同じ走査順で、3進数の下位桁から順に
+    /// `(0, 0, 0)`, `(1, 0, 0)`, ... へ戻していく。
+    ///
+    /// 復元時には、盤面上の空でないマスを数えて `moves_played` を作る。
+    /// また、先手黒で交互に打つルールに従い、手数が偶数なら黒番、
+    /// 奇数なら白番として `turn` を復元する。
+    ///
+    /// 注意: この関数は「キーとして表現できる盤面」を復元するだけで、
+    /// 重力に反していないか、黒白の個数が合法か、といった到達可能性までは検証しない。
+    /// 初期状態から `play` で生成した状態のキーを戻す用途を想定する。
+    ///
+    /// `3^64` 以上の値は64マスを超える桁を持つので、盤面キーとして不正とみなし `None` を返す。
+    pub fn from_board_key_base3(mut key: u128) -> Option<Self> {
+        let mut board = [[[Cell::Empty; BOARD_SIZE]; BOARD_SIZE]; BOARD_SIZE];
+        let mut moves_played = 0;
+
+        for z in 0..BOARD_SIZE {
+            for y in 0..BOARD_SIZE {
+                for x in 0..BOARD_SIZE {
+                    let digit = key % 3;
+                    let cell = Cell::from_base3_digit(digit)?;
+
+                    if cell != Cell::Empty {
+                        moves_played += 1;
+                    }
+
+                    board[z][y][x] = cell;
+                    key /= 3;
+                }
+            }
+        }
+
+        if key != 0 {
+            return None;
+        }
+
+        let turn = if moves_played % 2 == 0 {
+            Player::Black
+        } else {
+            Player::White
+        };
+
+        Some(Self {
+            board,
+            turn,
+            moves_played,
+        })
+    }
+
     /// 指定した位置の隣から、指定方向へ同じマス状態が何個続くかを数える。
     ///
     /// `start` 自身は数えない。`direction` に1歩進んだ場所から数え始める。
@@ -456,6 +507,31 @@ mod tests {
             .state;
 
         assert_eq!(state.board_key_base3(), 1 + 2 * 3_u128.pow(16));
+    }
+
+    /// 3進数キーに変換した盤面は、同じ `GameState` として復元できる。
+    #[test]
+    fn from_board_key_base3_restores_state_from_key() {
+        let mut state = GameState::initial();
+        state = state.play(Column::new(0, 0)).unwrap().state;
+        state = state.play(Column::new(1, 0)).unwrap().state;
+        state = state.play(Column::new(0, 0)).unwrap().state;
+
+        let restored = GameState::from_board_key_base3(state.board_key_base3()).unwrap();
+
+        assert_eq!(restored.board, state.board);
+        assert_eq!(restored.moves_played, state.moves_played);
+        assert_eq!(restored.turn, state.turn);
+        assert_eq!(restored.board_key_base3(), state.board_key_base3());
+    }
+
+    /// `3^64` 以上の値は64マスに収まらないため、盤面キーとして扱わない。
+    #[test]
+    fn from_board_key_base3_rejects_key_with_too_many_digits() {
+        assert_eq!(
+            GameState::from_board_key_base3(3_u128.pow(CELL_COUNT as u32)),
+            None
+        );
     }
 
     /// 指定方向に同じ色が続いている間だけ数える。
